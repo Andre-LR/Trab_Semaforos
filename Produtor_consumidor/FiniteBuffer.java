@@ -8,7 +8,8 @@ class FiniteBuffer {
   private int[] buffer;
 
   private Semaphore naoCheio;
-  private Semaphore naoVazio;
+  private Semaphore naoVazioPar;
+  private Semaphore naoVazioImpar;
   private Semaphore mutex;
 
   private void incrIn() {
@@ -25,24 +26,23 @@ class FiniteBuffer {
 
     mutex = new Semaphore(1); // para exclusao mutua (sc)
     naoCheio = new Semaphore(size); // controle de espaco disponivel
-    naoVazio = new Semaphore(0); // controle de itens
+    naoVazioPar = new Semaphore(0); // controle de itens pares
+    naoVazioImpar = new Semaphore(0); // controle de itens impares
   }
 
   public int insert(int v) {
-
-    if (mutex.tryAcquire()) { // tenta entrar na regiao critica
-      if (naoCheio.tryAcquire()) { // verifica se tem espaco no buffer
-        buffer[in] = v; // sc: insere elemento
-        incrIn(); // sc: insere elemento
-        naoVazio.release(); // avisa que nao esta vazio
-      } else {
-        System.out.println("\nBuffer cheio!\n");
-        sleep(2500);
-        v = -1;
-      }
-      mutex.release(); // sai sc
-    } else {
-      v = -1;
+    try { 
+      naoCheio.acquire();  //  espera ter espaco no buffer
+      mutex.acquire();     //  entra sc
+    } catch (InterruptedException ie) {}  
+    buffer[in]=v;          //  sc: insere elemento
+    incrIn();              //  sc: insere elemento
+    mutex.release();         //  sai sc 
+    
+    if(v%2==0){ // avisa que contém elemento par
+      naoVazioPar.release();
+    }else{
+      naoVazioImpar.release(); // avisa que contém elemento impar
     }
 
     return v;
@@ -50,55 +50,48 @@ class FiniteBuffer {
 
   public int deletePar() {
     int val = -1;
+    try {  
+      naoVazioPar.acquire(); //  espera o buffer conter pelo menos um item par
+      mutex.acquire();    //  entra na sc
+		}  catch (InterruptedException ie) {}  
 
-    if (mutex.tryAcquire()) { // tenta entrar na regiao critica
-      if (naoVazio.tryAcquire()) { // verifica buffer não está vazio
-        for (int i = 0; i < buffer.length; i++) { // retira o primeiro elemento par do buffer que encontrar
-          if (buffer[i] % 2 == 0) { // se for par
-            val = buffer[out];
-            incrOut(); // sc: remove elemento
-            naoCheio.release(); // avisa que tem espaco
-            break;
-          }
-
-          if (i == buffer.length - 1) { // se não encontrar nenhum par
-            System.out.println("\nNão há nenhum número par no buffer!\n");
-          }
-        }
-      } else {
-        System.out.println("\nBuffer vazio!\n");
-        sleep(2500);
+    for (int i = 0; i < buffer.length; i++) { // retira o primeiro elemento par do buffer que encontrar
+      if (buffer[i] % 2 == 0) { // se for par
+        val = buffer[out];
+        incrOut(); // sc: remove elemento
+        naoCheio.release(); // avisa que tem espaco
+        break;
       }
-      mutex.release(); // sai da sc
+
+      if (i == buffer.length - 1) { // se não encontrar nenhum par
+        System.out.println("\nNão há nenhum número par no buffer!\n");
+      }
     }
+    mutex.release(); // sai da sc
 
     return val;
   }
 
   public int deleteImpar() {
     int val = -1;
+    try {  
+      naoVazioImpar.acquire(); //  espera o buffer conter pelo menos um item impar
+      mutex.acquire();    //  entra na sc
+		}  catch (InterruptedException ie) {}  
 
-    if (mutex.tryAcquire()) { // tenta entrar na regiao critica
-      if (naoVazio.tryAcquire()) { // verifica buffer não está vazio
-        for (int i = 0; i < buffer.length; i++) { // retira o primeiro elemento impar do buffer que encontrar
-          if (buffer[i] % 2 != 0) { // se for impar
-            val = buffer[out];
-            incrOut(); // sc: remove elemento
-            naoCheio.release(); // avisa que tem espaco
-            break;
-          }
-
-          if (i == buffer.length - 1) { // se não encontrar nenhum impar
-            System.out.println("\nNão há nenhum número impar no buffer!\n");
-          }
-        }
-      } else {
-        System.out.println("\nBuffer vazio!\n");
-        sleep(2500);
+    for (int i = 0; i < buffer.length; i++) { // retira o primeiro elemento impar do buffer que encontrar
+      if (buffer[i] % 2 != 0) { // se for impar
+        val = buffer[out];
+        incrOut(); // sc: remove elemento
+        naoCheio.release(); // avisa que tem espaco
+        break;
       }
-      mutex.release(); // sai da sc
-    }
 
+      if (i == buffer.length - 1) { // se não encontrar nenhum impar
+        System.out.println("\nNão há nenhum número impar no buffer!\n");
+      }
+    }
+    mutex.release(); // sai da sc
     return val;
   }
 
